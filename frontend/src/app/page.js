@@ -38,7 +38,7 @@ export default function Home() {
       es: {
         saludos: ['hola', 'buenos dias', 'buenas tardes', 'wenas', 'que tal'],
         despedidas: ['gracias', 'adios', 'chao', 'hasta luego'],
-        habitacion: ['habitacion', 'habitaciones', 'cuarto', 'precio', 'dormir', 'alojamiento'],
+        habitacion: ['habitacion', 'habitaciones', 'cuarto', 'precio', 'dormir', 'alojamiento', 'reservar'],
         restaurante: ['restaurante', 'comida', 'cena', 'almuerzo', 'mesa', 'hambre', 'desayuno', 'cenar'],
         mantenimiento: ['mantenimiento', 'roto', 'daño', 'limpieza', 'toallas', 'aire acondicionado', 'falla', 'sucio', 'aire'],
         servicios: ['piscina', 'gimnasio', 'wifi', 'horario', 'checkout', 'servicios']
@@ -46,7 +46,7 @@ export default function Home() {
       en: {
         saludos: ['hello', 'hi', 'hey', 'good morning'],
         despedidas: ['thanks', 'thank you', 'bye', 'goodbye'],
-        habitacion: ['room', 'rooms', 'price', 'book', 'stay'],
+        habitacion: ['room', 'rooms', 'price', 'book', 'stay', 'reserve'],
         restaurante: ['restaurant', 'food', 'dinner', 'lunch', 'table', 'breakfast'],
         mantenimiento: ['maintenance', 'broken', 'cleaning', 'towels', 'ac', 'dirty'],
         servicios: ['pool', 'gym', 'wifi', 'hours', 'checkout', 'services']
@@ -54,7 +54,7 @@ export default function Home() {
       pt: {
         saludos: ['ola', 'bom dia', 'boa tarde', 'oi'],
         despedidas: ['obrigado', 'obrigada', 'tchau', 'adeus'],
-        habitacion: ['quarto', 'quartos', 'preco', 'hospedagem', 'dormir'],
+        habitacion: ['quarto', 'quartos', 'preco', 'hospedagem', 'dormir', 'reservar'],
         restaurante: ['restaurante', 'comida', 'jantar', 'almoco', 'mesa', 'cafe'],
         mantenimiento: ['manutencao', 'quebrado', 'limpeza', 'toalhas', 'ar condicionado', 'sujo'],
         servicios: ['piscina', 'academia', 'wifi', 'horario', 'servicos']
@@ -62,7 +62,7 @@ export default function Home() {
       fr: {
         saludos: ['bonjour', 'salut', 'bonsoir'],
         despedidas: ['merci', 'au revoir', 'adieu'],
-        habitacion: ['chambre', 'chambres', 'prix', 'dormir'],
+        habitacion: ['chambre', 'chambres', 'prix', 'dormir', 'reserver'],
         restaurante: ['restaurant', 'nourriture', 'diner', 'dejeuner', 'table'],
         mantenimiento: ['entretien', 'casse', 'nettoyage', 'serviettes', 'sale'],
         servicios: ['piscine', 'gym', 'wifi', 'horaires', 'services']
@@ -70,7 +70,7 @@ export default function Home() {
       it: {
         saludos: ['ciao', 'buongiorno', 'buonasera', 'salve'],
         despedidas: ['grazie', 'arrivederci', 'addio'],
-        habitacion: ['camera', 'camere', 'prezzo', 'dormire'],
+        habitacion: ['camera', 'camere', 'prezzo', 'dormire', 'prenotare'],
         restaurante: ['ristorante', 'cibo', 'cena', 'pranzo', 'tavolo'],
         mantenimiento: ['manutenzione', 'rotto', 'pulizia', 'asciugamani', 'sporco'],
         servicios: ['piscina', 'palestra', 'wifi', 'orari', 'servizi']
@@ -79,7 +79,30 @@ export default function Home() {
 
     let botResponseText = '';
 
-    if (flujoActual.estado === 'esperando_restaurante') {
+    // --- NUEVO FLUJO: RESERVA DE HABITACIÓN ---
+    if (flujoActual.estado === 'esperando_reserva_habitacion') {
+      fetch('https://fabiola2026.app.n8n.cloud/webhook-test/civa-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: "Reserva Habitacion",
+          cliente: userText,
+          fecha: new Date().toLocaleString()
+        })
+      }).catch(err => console.log("Error Webhook:", err));
+
+      const respuestasConfHab = {
+        es: '¡Excelente! Tu solicitud de reserva ha sido enviada a Recepción. Te esperamos pronto. 🛏️',
+        en: 'Excellent! Your reservation request has been sent to Reception. See you soon. 🛏️',
+        pt: 'Excelente! O seu pedido de reserva foi enviado para a Recepção. Esperamos você em breve. 🛏️',
+        fr: 'Excellent! Votre demande de réservation a été envoyée à la réception. À bientôt. 🛏️',
+        it: 'Eccellente! La tua richiesta di prenotazione è stata inviata alla Reception. Ti aspettiamo. 🛏️'
+      };
+      botResponseText = respuestasConfHab[flujoActual.idioma];
+      setFlujoActual({ estado: 'inicio', idioma: 'es' });
+    }
+    // --- FLUJO: RESERVA RESTAURANTE ---
+    else if (flujoActual.estado === 'esperando_restaurante') {
       await supabase.from('restaurante_reservas').insert([
         { nombre_huesped: userText, cantidad_personas: 1, fecha_hora: new Date().toISOString() }
       ]);
@@ -104,6 +127,7 @@ export default function Home() {
       botResponseText = respuestasConfRest[flujoActual.idioma];
       setFlujoActual({ estado: 'inicio', idioma: 'es' });
     } 
+    // --- FLUJO: MANTENIMIENTO ---
     else if (flujoActual.estado === 'esperando_mantenimiento') {
       await supabase.from('mantenimiento_tickets').insert([
         { numero_habitacion: 'Por revisar', descripcion_problema: userText }
@@ -129,6 +153,7 @@ export default function Home() {
       botResponseText = respuestasConfMant[flujoActual.idioma];
       setFlujoActual({ estado: 'inicio', idioma: 'es' });
     } 
+    // --- DETECCIÓN DE INTENCIONES (INICIO) ---
     else {
       let idiomaDetectado = 'es';
       let intencionDetectada = 'desconocido';
@@ -150,6 +175,18 @@ export default function Home() {
           habitaciones.forEach(hab => {
              botResponseText += `✨ ${hab.tipo} (Máx. ${hab.capacidad}) - $${hab.precio_noche}/noche\n`;
           });
+          
+          // AHORA PREGUNTA SI DESEA RESERVAR
+          const preguntarReserva = {
+            es: '\n¿Deseas reservar alguna? Por favor, escribe tu nombre y el tipo de cuarto.',
+            en: '\nWould you like to book? Please write your name and the room type.',
+            pt: '\nGostaria de reservar? Escreva seu nome e o tipo de quarto.',
+            fr: '\nVoulez-vous réserver? Veuillez écrire votre nom et le type de chambre.',
+            it: '\nVuoi prenotare? Scrivi il tuo nome e il tipo di camera.'
+          };
+          botResponseText += preguntarReserva[idiomaDetectado];
+          setFlujoActual({ estado: 'esperando_reserva_habitacion', idioma: idiomaDetectado });
+
         } else {
           botResponseText = 'Lo siento, el hotel está lleno / The hotel is full. 😔';
         }
