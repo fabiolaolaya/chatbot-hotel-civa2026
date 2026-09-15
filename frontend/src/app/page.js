@@ -2,11 +2,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONEXIÓN A BASE DE DATOS (Restaurada para que funcione al instante) ---
+// --- CONEXIÓN A BASE DE DATOS ---
 const supabaseUrl = 'https://whxekpmtvckkftfzbjeg.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndoeGVrcG10dmNra2Z0ZnpiamVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0Njc1NzEsImV4cCI6MjEwNDA0MzU3MX0.BkrtvpDjCLL402N-4JWkT_p7G979hSkkJXVOTGMJ2Lk';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-// --------------------------------------
 
 export default function Home() {
   const [messages, setMessages] = useState([
@@ -34,7 +33,6 @@ export default function Home() {
 
     const textoLimpio = userText.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    // DICCIONARIOS MULTILINGÜES INTACTOS
     const diccionarios = {
       es: { saludos: ['hola', 'buenos dias', 'buenas tardes', 'wenas', 'que tal'], despedidas: ['gracias', 'adios', 'chao', 'hasta luego'], habitacion: ['habitacion', 'habitaciones', 'cuarto', 'precio', 'dormir', 'alojamiento', 'reservar'], restaurante: ['restaurante', 'comida', 'cena', 'almuerzo', 'mesa', 'hambre', 'desayuno', 'cenar'], mantenimiento: ['mantenimiento', 'roto', 'daño', 'limpieza', 'toallas', 'aire acondicionado', 'falla', 'sucio', 'aire'], servicios: ['piscina', 'gimnasio', 'wifi', 'horario', 'checkout', 'servicios'] },
       en: { saludos: ['hello', 'hi', 'hey', 'good morning'], despedidas: ['thanks', 'thank you', 'bye', 'goodbye'], habitacion: ['room', 'rooms', 'price', 'book', 'stay', 'reserve'], restaurante: ['restaurant', 'food', 'dinner', 'lunch', 'table', 'breakfast'], mantenimiento: ['maintenance', 'broken', 'cleaning', 'towels', 'ac', 'dirty'], servicios: ['pool', 'gym', 'wifi', 'hours', 'checkout', 'services'] },
@@ -46,18 +44,11 @@ export default function Home() {
     let botResponseText = '';
 
     try {
-      // --- FLUJO: RESERVA DE HABITACIÓN ---
       if (flujoActual.estado === 'esperando_reserva_habitacion') {
-        
-        // Enviamos directo a Recepción (n8n) sin romper el esquema de Supabase
         await fetch('https://fabiola2026.app.n8n.cloud/webhook/civa-webhook', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: "Recepción", // Cambiado para que coincida con tu nodo Switch
-            cliente: userText,
-            fecha: new Date().toLocaleString()
-          })
+          body: JSON.stringify({ tipo: "Recepción", cliente: userText, fecha: new Date().toLocaleString() })
         }).catch(err => console.log("n8n advertencia:", err));
 
         const respuestasConfHab = {
@@ -71,63 +62,62 @@ export default function Home() {
         setFlujoActual({ estado: 'inicio', idioma: 'es' });
       }
       
-      // --- FLUJO: RESERVA RESTAURANTE ---
       else if (flujoActual.estado === 'esperando_restaurante') {
-        // Inserta en Supabase (Esta tabla sí soporta texto directo)
-        await supabase.from('restaurante_reservas').insert([
+        // Diagnóstico: Captura de error de Supabase
+        const { error: errRestaurante } = await supabase.from('restaurante_reservas').insert([
           { nombre_huesped: userText, cantidad_personas: 1, fecha_hora: new Date().toISOString() }
         ]);
 
-        await fetch('https://fabiola2026.app.n8n.cloud/webhook/civa-webhook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: "Restaurante", // Cambiado para que coincida con tu nodo Switch
-            cliente: userText,
-            fecha: new Date().toLocaleString()
-          })
-        }).catch(err => console.log("n8n advertencia:", err));
+        if (errRestaurante) {
+          botResponseText = `⚠️ Error de Base de Datos (Restaurante): ${errRestaurante.message}`;
+          setFlujoActual({ estado: 'inicio', idioma: 'es' });
+        } else {
+          await fetch('https://fabiola2026.app.n8n.cloud/webhook/civa-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: "Restaurante", cliente: userText, fecha: new Date().toLocaleString() })
+          }).catch(err => console.log("n8n advertencia:", err));
 
-        const respuestasConfRest = {
-          es: '¡Listo! Tu reserva en el restaurante ha sido registrada y enviada a gerencia. ¡Buen provecho! 🍽️',
-          en: 'Done! Your restaurant reservation has been registered. Enjoy your meal! 🍽️',
-          pt: 'Pronto! Sua reserva no restaurante foi registrada. Bom apetite! 🍽️',
-          fr: 'Fait! Votre réservation au restaurant a été enregistrée. Bon appétit! 🍽️',
-          it: 'Fatto! La tua prenotazione al ristorante è stata registrata. Buon appetito! 🍽️'
-        };
-        botResponseText = respuestasConfRest[flujoActual.idioma] || respuestasConfRest['es'];
-        setFlujoActual({ estado: 'inicio', idioma: 'es' });
+          const respuestasConfRest = {
+            es: '¡Listo! Tu reserva en el restaurante ha sido registrada y enviada a gerencia. ¡Buen provecho! 🍽️',
+            en: 'Done! Your restaurant reservation has been registered. Enjoy your meal! 🍽️',
+            pt: 'Pronto! Sua reserva no restaurante foi registrada. Bom apetite! 🍽️',
+            fr: 'Fait! Votre réservation au restaurant a été enregistrée. Bon appétit! 🍽️',
+            it: 'Fatto! La tua prenotazione al ristorante è stata registrata. Buon appetito! 🍽️'
+          };
+          botResponseText = respuestasConfRest[flujoActual.idioma] || respuestasConfRest['es'];
+          setFlujoActual({ estado: 'inicio', idioma: 'es' });
+        }
       } 
       
-      // --- FLUJO: MANTENIMIENTO ---
       else if (flujoActual.estado === 'esperando_mantenimiento') {
-        // Inserta en Supabase (Esta tabla sí soporta texto directo)
-        await supabase.from('mantenimiento_tickets').insert([
+        // Diagnóstico: Captura de error de Supabase
+        const { error: errMantenimiento } = await supabase.from('mantenimiento_tickets').insert([
           { numero_habitacion: 'Por revisar', descripcion_problema: userText }
         ]);
 
-        await fetch('https://fabiola2026.app.n8n.cloud/webhook/civa-webhook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: "Mantenimiento", // Cambiado para que coincida con tu nodo Switch
-            problema: userText,
-            fecha: new Date().toLocaleString()
-          })
-        }).catch(err => console.log("n8n advertencia:", err));
+        if (errMantenimiento) {
+          botResponseText = `⚠️ Error de Base de Datos (Mantenimiento): ${errMantenimiento.message}`;
+          setFlujoActual({ estado: 'inicio', idioma: 'es' });
+        } else {
+          await fetch('https://fabiola2026.app.n8n.cloud/webhook/civa-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: "Mantenimiento", problema: userText, fecha: new Date().toLocaleString() })
+          }).catch(err => console.log("n8n advertencia:", err));
 
-        const respuestasConfMant = {
-          es: '¡Reporte enviado! Se ha alertado automáticamente al equipo de mantenimiento. 🛠️',
-          en: 'Report sent! Our maintenance team has been alerted right away. 🛠️',
-          pt: 'Relatório enviado! Nossa equipe de manutenção foi alertada. 🛠️',
-          fr: 'Rapport envoyé! Notre équipe d\'entretien a été alertée. 🛠️',
-          it: 'Segnalazione inviata! Il nostro team di manutenzione è stato allertato. 🛠️'
-        };
-        botResponseText = respuestasConfMant[flujoActual.idioma] || respuestasConfMant['es'];
-        setFlujoActual({ estado: 'inicio', idioma: 'es' });
+          const respuestasConfMant = {
+            es: '¡Reporte enviado! Se ha alertado automáticamente al equipo de mantenimiento. 🛠️',
+            en: 'Report sent! Our maintenance team has been alerted right away. 🛠️',
+            pt: 'Relatório enviado! Nossa equipe de manutenção foi alertada. 🛠️',
+            fr: 'Rapport envoyé! Notre équipe d\'entretien a été alertée. 🛠️',
+            it: 'Segnalazione inviata! Il nostro team di manutenzione è stato allertato. 🛠️'
+          };
+          botResponseText = respuestasConfMant[flujoActual.idioma] || respuestasConfMant['es'];
+          setFlujoActual({ estado: 'inicio', idioma: 'es' });
+        }
       } 
       
-      // --- DETECCIÓN DE INTENCIONES (INICIO) ---
       else {
         let idiomaDetectado = 'es';
         let intencionDetectada = 'desconocido';
@@ -208,8 +198,8 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error("Error en Supabase:", error);
-      botResponseText = "Hubo un error de conexión con la base de datos, pero he enviado tu alerta a recepción. ⚠️";
+      console.error("Error general:", error);
+      botResponseText = "Hubo un error interno en el sistema. ⚠️";
       setFlujoActual({ estado: 'inicio', idioma: 'es' });
     }
 
